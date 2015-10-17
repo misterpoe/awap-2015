@@ -28,11 +28,10 @@ class Player(BasePlayer):
         self.missed_orders = []
 
         graph = state.get_graph()
-        self.paths = []
+        self.paths = {}
 
         for src in range(GRAPH_SIZE):
-            paths_from_src = nx.single_source_shortest_path(graph, src)
-            self.paths.append(paths_from_src)
+            self.paths[src] = []
 
         return
 
@@ -81,15 +80,17 @@ class Player(BasePlayer):
             return norm(0, 0.5, ORDER_VAR) * 2
         return norm(dist - 0.5, dist + 0.5, ORDER_VAR)
 
-    def update_probs(self, orders):
+    def update_probs(self, state, orders):
+        graph = state.get_graph()
         for order in orders:
             if order.id not in self.order_processed_for_probs:
+                src_paths = nx.single_source_shortest_path(graph, order.node)
             #    print('Update order #%s' % order.id)
                 # This is a new order!
                 self.order_processed_for_probs[order.id] = True
                 # Update probs of all v
                 for v in range(GRAPH_SIZE):
-                    dist = len(self.paths[v][order.node])
+                    dist = len(src_paths[v])
                     self.probs[v] += self.get_prob_from_dist(dist)
 
     def guessHubs(self):
@@ -113,9 +114,9 @@ class Player(BasePlayer):
             return False
         if len(self.stations) == 0:
             return state.time > self.turnsToWait
-        if self.total_orders_done_since_build == 0:
+        if self.total_orders_done_since_build < 10:
             return False
-        if float(len(self.missed_orders)) / self.total_orders_done_since_build <= 0.5:
+        if float(len(self.missed_orders)) / self.total_orders_done_since_build <= 0.7:
             return False
         if not self.shouldBuild(state):
             return False
@@ -140,9 +141,9 @@ class Player(BasePlayer):
         self.update_orders(state)
 
         if len(self.stations) == 0:
-            self.update_probs(pending_orders)
+            self.update_probs(state, pending_orders)
         else:
-            self.update_probs(self.missed_orders)
+            self.update_probs(state, self.missed_orders)
 
         self.guessedHubs = self.guessHubs()
         #print(self.guessedHubs)
