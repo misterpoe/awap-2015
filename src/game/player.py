@@ -22,6 +22,15 @@ class Player(BasePlayer):
             The initial state of the game. See state.py for more information.
         """
 
+        self.probs = [0] * GRAPH_SIZE
+        self.order_processed = {}
+        graph = state.get_graph()
+        self.paths = []
+
+        for src in GRAPH_SIZE:
+            paths_from_src = nx.single_source_shortest_path(graph, src)
+            self.paths.append(paths_from_src)
+
         return
 
     # Checks if we can use a given path
@@ -31,6 +40,24 @@ class Player(BasePlayer):
             if graph.edge[path[i]][path[i + 1]]['in_use']:
                 return False
         return True
+
+    def get_prob_from_dist(self, dist):
+        return dist;
+
+    def update_probs(self, pending_orders):
+        for order in pending_orders:
+            if order.id not in self.order_processed:
+                # This is a new order!
+                self.order_processed[order.id] = True
+                # Update probs of all v
+                for v in GRAPH_SIZE:
+                    dist = len(self.paths[v][order.node])
+                    self.probs[v] += get_prob_from_dist(dist)
+
+    def guessHubs(self):
+        hubs = [i for i in range(GRAPH_SIZE)]
+        hubs.sort(key=lambda v: self.probs[v], reverse=True)
+        return hubs
 
     def step(self, state):
         """
@@ -51,18 +78,8 @@ class Player(BasePlayer):
         # We recommend making it a bit smarter ;-)
 
         graph = state.get_graph()
-        station = graph.nodes()[0]
-
-        commands = []
-        if not self.has_built_station:
-            commands.append(self.build_command(station))
-            self.has_built_station = True
-
         pending_orders = state.get_pending_orders()
-        if len(pending_orders) != 0:
-            order = random.choice(pending_orders)
-            path = nx.shortest_path(graph, station, order.get_node())
-            if self.path_is_valid(state, path):
-                commands.append(self.send_command(order, path))
+        
+        self.update_probs(pending_orders)
 
         return commands
