@@ -9,8 +9,6 @@ class Player(BasePlayer):
     name or the base class.
     """
 
-
-
     def __init__(self, state):
         self.timefactor = 0.01
         self.l= GAME_LENGTH
@@ -20,10 +18,17 @@ class Player(BasePlayer):
         self.pendings = []
         self.guessedHubs = []
         self.stations = []
+
+        self.probs = [0] * GRAPH_SIZE
+        self.order_processed = {}
+        graph = state.get_graph()
+        self.paths = []
+
+        for src in GRAPH_SIZE:
+            paths_from_src = nx.single_source_shortest_path(graph, src)
+            self.paths.append(paths_from_src)
+
         return
-    #guess the hubs and put them in a list
-    def guessHubs(self):
-        return [42]
 
     # Checks if we can use a given path
     def path_is_valid(self, state, path):
@@ -32,6 +37,24 @@ class Player(BasePlayer):
             if graph.edge[path[i]][path[i + 1]]['in_use']:
                 return False
         return True
+
+    def get_prob_from_dist(self, dist):
+        return dist;
+
+    def update_probs(self, pending_orders):
+        for order in pending_orders:
+            if order.id not in self.order_processed:
+                # This is a new order!
+                self.order_processed[order.id] = True
+                # Update probs of all v
+                for v in GRAPH_SIZE:
+                    dist = len(self.paths[v][order.node])
+                    self.probs[v] += get_prob_from_dist(dist)
+
+    def guessHubs(self):
+        hubs = [i for i in range(GRAPH_SIZE)]
+        hubs.sort(key=lambda v: self.probs[v], reverse=True)
+        return hubs
 
     def step(self, state):
         """
@@ -47,7 +70,9 @@ class Player(BasePlayer):
             self.build_command. The commands are evaluated in order.
         """
         #recomputing
-        self.pendings = state.pending_orders
+        pending_orders = state.get_pending_orders()
+        self.update_probs(pending_orders)
+
         self.guessedHubs = self.guessHubs()
 
         #after colecting some data
@@ -55,27 +80,25 @@ class Player(BasePlayer):
             graph = state.get_graph()
             station = graph.nodes()[0]
 
-            commands = []
-            for guess in self.guessedHubs:
-                if guess not in self.stations:
-                    commands.append(self.build_command(guess))
-                    self.stations.append(guess)
+        commands = []
+        for guess in self.guessedHubs:
+            if guess not in self.stations:
+                commands.append(self.build_command(guess))
+                self.stations.append(guess)
 
-            #print len(self.stations)
-
-            pending_orders = state.get_pending_orders()
-            if len(pending_orders) != 0:
-                order = random.choice(pending_orders)
-                bestPath = None
-                bestLength = 9999
-                for station in self.stations:
-                    apath = nx.shortest_path(graph, station, order.get_node())
-                    print(len(apath))
-                    if bestPath == None or len(apath) < len(bestPath):
-                        bestPath = apath
-                        bestLength = len(apath)
-                if self.path_is_valid(state, bestPath):
-                    commands.append(self.send_command(order, bestPath))
+        #print len(self.stations)
+        if len(pending_orders) != 0:
+            order = random.choice(pending_orders)
+            bestPath = None
+            bestLength = 9999
+            for station in self.stations:
+                apath = nx.shortest_path(graph, station, order.get_node())
+                print(len(apath))
+                if bestPath == None or len(apath) < len(bestPath):
+                    bestPath = apath
+                    bestLength = len(apath)
+            if self.path_is_valid(state, bestPath):
+                commands.append(self.send_command(order, bestPath))
 
             return commands
         return []
