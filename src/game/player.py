@@ -9,18 +9,15 @@ class Player(BasePlayer):
     name or the base class.
     """
 
-    # You can set up static state here
-    has_built_station = False
-
     def __init__(self, state):
-        """
-        Initializes your Player. You can set up persistent state, do analysis
-        on the input graph, engage in whatever pre-computation you need. This
-        function must take less than Settings.INIT_TIMEOUT seconds.
-        --- Parameters ---
-        state : State
-            The initial state of the game. See state.py for more information.
-        """
+        self.timefactor = 0.01
+        self.l= GAME_LENGTH
+        self.h = HUBS
+        self.p = ORDER_CHANCE
+        self.turnsToWait = min(1.0*self.h/self.p , self.timefactor*self.l*1.0)
+        self.pendings = []
+        self.guessedHubs = []
+        self.stations = []
 
         self.probs = [0] * GRAPH_SIZE
         self.order_processed = {}
@@ -72,14 +69,36 @@ class Player(BasePlayer):
             Each command should be generated via self.send_command or
             self.build_command. The commands are evaluated in order.
         """
-
-        # We have implemented a naive bot for you that builds a single station
-        # and tries to find the shortest path from it to first pending order.
-        # We recommend making it a bit smarter ;-)
-
-        graph = state.get_graph()
+        #recomputing
         pending_orders = state.get_pending_orders()
-        
         self.update_probs(pending_orders)
 
-        return commands
+        self.guessedHubs = self.guessHubs()
+
+        #after colecting some data
+        if state.time > self.turnsToWait:
+            graph = state.get_graph()
+            station = graph.nodes()[0]
+
+        commands = []
+        for guess in self.guessedHubs:
+            if guess not in self.stations:
+                commands.append(self.build_command(guess))
+                self.stations.append(guess)
+
+        #print len(self.stations)
+        if len(pending_orders) != 0:
+            order = random.choice(pending_orders)
+            bestPath = None
+            bestLength = 9999
+            for station in self.stations:
+                apath = nx.shortest_path(graph, station, order.get_node())
+                print(len(apath))
+                if bestPath == None or len(apath) < len(bestPath):
+                    bestPath = apath
+                    bestLength = len(apath)
+            if self.path_is_valid(state, bestPath):
+                commands.append(self.send_command(order, bestPath))
+
+            return commands
+        return []
