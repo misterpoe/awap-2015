@@ -43,12 +43,12 @@ class Player(BasePlayer):
 
         total_nodes = 1
         search_radius = 0
-        (best, bestDeg) = (hub, nx.degree(graph, hub))
+        (best, bestDeg) = (hub, 0 if hub in self.stations else nx.degree(graph, hub))
         S = set([hub])
         visited = set()
 
         # cap on the nodes we look at and the distance from the predicted hub
-        while total_nodes < nodes_cap and search_radius < min(ORDER_VAR/2, SCORE_MEAN/DECAY_FACTOR):
+        while total_nodes < nodes_cap and search_radius < min(ORDER_VAR, SCORE_MEAN/DECAY_FACTOR):
             nextS = set()
             for s in S:
                 if nx.degree(graph, s) > bestDeg and best not in self.stations:
