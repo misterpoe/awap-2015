@@ -2,6 +2,7 @@ import networkx as nx
 import random
 from base_player import BasePlayer
 from settings import *
+from norm import norm
 
 class Player(BasePlayer):
     """
@@ -24,7 +25,7 @@ class Player(BasePlayer):
         graph = state.get_graph()
         self.paths = []
 
-        for src in GRAPH_SIZE:
+        for src in range(GRAPH_SIZE):
             paths_from_src = nx.single_source_shortest_path(graph, src)
             self.paths.append(paths_from_src)
 
@@ -39,7 +40,9 @@ class Player(BasePlayer):
         return True
 
     def get_prob_from_dist(self, dist):
-        return dist;
+        if dist == 0:
+            return norm(0, 0.5, ORDER_VAR) * 2
+        return norm(dist - 0.5, dist + 0.5, ORDER_VAR)
 
     def update_probs(self, pending_orders):
         for order in pending_orders:
@@ -47,9 +50,9 @@ class Player(BasePlayer):
                 # This is a new order!
                 self.order_processed[order.id] = True
                 # Update probs of all v
-                for v in GRAPH_SIZE:
+                for v in range(GRAPH_SIZE):
                     dist = len(self.paths[v][order.node])
-                    self.probs[v] += get_prob_from_dist(dist)
+                    self.probs[v] += self.get_prob_from_dist(dist)
 
     def guessHubs(self):
         hubs = [i for i in range(GRAPH_SIZE)]
@@ -74,31 +77,35 @@ class Player(BasePlayer):
         self.update_probs(pending_orders)
 
         self.guessedHubs = self.guessHubs()
+        #print(self.guessedHubs)
 
         #after colecting some data
         if state.time > self.turnsToWait:
             graph = state.get_graph()
             station = graph.nodes()[0]
 
-        commands = []
-        for guess in self.guessedHubs:
-            if guess not in self.stations:
-                commands.append(self.build_command(guess))
-                self.stations.append(guess)
+            commands = []
+            for guess in self.guessedHubs:
+                if guess not in self.stations:
+                    cost = INIT_BUILD_COST*(BUILD_FACTOR**len(self.stations))
+                    if cost <= state.get_money():
+                        commands.append(self.build_command(guess))
+                        self.stations.append(guess)
 
-        #print len(self.stations)
-        if len(pending_orders) != 0:
-            order = random.choice(pending_orders)
-            bestPath = None
-            bestLength = 9999
-            for station in self.stations:
-                apath = nx.shortest_path(graph, station, order.get_node())
-                print(len(apath))
-                if bestPath == None or len(apath) < len(bestPath):
-                    bestPath = apath
-                    bestLength = len(apath)
-            if self.path_is_valid(state, bestPath):
-                commands.append(self.send_command(order, bestPath))
+            #print len(self.stations)
+            if len(pending_orders) != 0:
+                order = random.choice(pending_orders)
+                bestPath = None
+                bestLength = 9999
+                for station in self.stations:
+                    apath = self.paths[station][order.get_node()]
+                    #print(len(apath))
+                    if bestPath == None or len(apath) < len(bestPath):
+                        bestPath = apath
+                        bestLength = len(apath)
+                if self.path_is_valid(state, bestPath):
+                    commands.append(self.send_command(order, bestPath))
 
-            return commands
+                return commands
+
         return []
